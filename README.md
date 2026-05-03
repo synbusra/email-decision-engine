@@ -67,3 +67,139 @@ graph LR
     E --> H["Sonuç penceresi"]
     F --> H
     G --> H
+
+## 🤖 Kullanılan Teknolojiler
+
+| Teknoloji | Kullanım Amacı |
+|---|---|
+| Python | Ana uygulama dili |
+| Tkinter | Sonuç penceresi / masaüstü arayüz |
+| pynput | F8 kısayolunu dinleme |
+| pyautogui | Seçili metni kopyalama işlemi |
+| pyperclip | Pano işlemleri |
+| Requests | Ollama API bağlantısı |
+| Ollama | Local AI model çalıştırma |
+| Batch Script | Kurulum ve başlatma otomasyonu |
+
+
+## 🏠 Local AI Kullanımı - Ollama
+
+Bu proje local yapay zeka modeli ile çalışır.  
+Öncelikle bilgisayarda **Ollama** kurulu olmalıdır.
+
+Model indirmek için:
+
+```bat
+ollama pull gemma3:1b
+
+
+
+
+
+
+### Çalıştırma
+
+
+Local AI için:
+
+```bat
+py main.pyw
+```
+
+Kurulu modelleri kontrol etmek için:
+
+```bat
+ollama list```
+
+Uygulamayı çalıştırmak için:
+
+```bat
+ollama list```
+
+Alternatif olarak Python ile doğrudan çalıştırmak için:
+
+```bat
+py main.pyw```
+
+
+Uygulama çalıştıktan sonra:
+
+1. Herhangi bir e-posta metnini seçin.
+2. Klavyeden **F8** tuşuna basın.
+3. Seçili metin otomatik olarak analiz edilir.
+4. Sonuç ayrı bir pencerede gösterilir.
+
+
+## 🧪 Test Senaryosu
+
+**Input:**
+
+```text
+Merhaba,
+
+Dünkü görüşmemize istinaden sistem hatalarının giderilmesi gerekiyor. 
+Öncelikle sistem hatasını bugün içerisinde inceleyip çözebilirsek iyi olur.
+
+Ayrıca performans iyileştirme analizi hazırlanmalı ve analiz sonuçları yarına kadar paylaşılmalıdır.
+
+Hafta sonu yapılacak çalışma öncesinde gerekli hazırlıkların tamamlanmasını rica ederim.
+
+Teşekkürler.```
+
+**Output:**
+
+```text
+Özet:
+Dünkü görüşmeye istinaden sistem hatalarının giderilmesi, performans analizinin yapılması ve hafta sonu çalışması öncesi hazırlıkların tamamlanması talep edilmektedir.
+
+Yapılacaklar:
+
+1. Görev: Sistem hatasını incele ve gider.
+   Öncelik: HIGH
+   Deadline: Bugün içerisinde
+
+2. Görev: Performans iyileştirme analizi hazırla.
+   Öncelik: MEDIUM
+   Deadline: Belirtilmemiş
+
+3. Görev: Analiz sonuçlarını paylaş.
+   Öncelik: MEDIUM
+   Deadline: Yarına kadar
+
+4. Görev: Hafta sonu çalışması öncesi hazırlıkları tamamla.
+   Öncelik: HIGH
+   Deadline: Hafta sonu çalışması öncesinde```
+
+
+
+
+
+## 📁 Proje Yapısı
+
+```text
+email-decision-engine/
+│
+├── main.pyw              # Email Decision Engine ana uygulama dosyası
+├── BASLAT.bat            # Uygulamayı başlatan batch dosyası
+├── kurulum.bat           # Sanal ortam ve paket kurulumu
+├── requirements.txt      # Gerekli Python paketleri
+├── README.md             # Proje açıklaması
+└── screenshots/          # Ekran görüntüleri
+
+## 🚀 Sonuç
+
+Email Decision Engine, uzun ve dağınık e-postaları manuel olarak inceleme ihtiyacını azaltarak daha hızlı aksiyon alınmasını sağlar.
+Kullanıcı yalnızca e-posta metnini seçip F8 tuşuna basarak özet, görev listesi, öncelik ve deadline bilgilerine ulaşabilir.
+
+Bu sayede e-posta yönetimi daha düzenli, takip edilebilir ve aksiyon odaklı hale gelir.
+---
+
+## 👨‍💻 Geliştirici Notu
+
+Bu proje, mevcut bir GitHub reposu fork edilerek geliştirilmiştir.
+Ana çalışma yapısı korunmuş, uygulamanın ana işlevi e-posta analizi ve görev çıkarımı üzerine yeniden tasarlanmıştır.
+---
+
+⭐ Projeyi beğendiysen yıldızlamayı unutma!
+
+
