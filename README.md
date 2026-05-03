@@ -40,6 +40,17 @@ Uygulama, kullanıcı tarafından seçilen e-posta içeriğini **F8 kısayolu** 
 
 ---
 
+
+## 📸 Ekran Görüntüleri
+
+### Mail Metni Seçimi
+
+![Mail Metni Seçimi](1.png)
+
+### Analiz Sonucu
+
+![Analiz Sonucu](2.png)
+
 ## ⚡ Özellikler
 
 - ✉️ Seçili e-posta metnini analiz etme
@@ -200,5 +211,7 @@ Bu proje, mevcut bir GitHub reposu fork edilerek geliştirilmiştir.
 Ana çalışma yapısı korunmuş, uygulamanın ana işlevi e-posta analizi ve görev çıkarımı üzerine yeniden tasarlanmıştır.
 
 ---
+
+
 
 ⭐ Projeyi beğendiysen yıldızlamayı unutma!
