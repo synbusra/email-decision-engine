@@ -81,6 +81,7 @@ graph LR
 | Ollama | Local AI model çalıştırma |
 | Batch Script | Kurulum ve başlatma otomasyonu |
 
+---
 
 ## 🏠 Local AI Kullanımı - Ollama
 
@@ -91,44 +92,38 @@ Model indirmek için:
 
 ```bat
 ollama pull gemma3:1b
-
-
-
-
-
-
-### Çalıştırma
-
-
-Local AI için:
-
-```bat
-py main.pyw
 ```
 
 Kurulu modelleri kontrol etmek için:
 
 ```bat
-ollama list```
+ollama list
+```
 
-Uygulamayı çalıştırmak için:
+---
+
+## 🚀 Uygulamayı Çalıştırma
+
+Projeyi indirdikten sonra klasör içinde aşağıdaki dosyayı çalıştırın:
 
 ```bat
-ollama list```
+BASLAT.bat
+```
 
 Alternatif olarak Python ile doğrudan çalıştırmak için:
 
 ```bat
-py main.pyw```
-
+py main.pyw
+```
 
 Uygulama çalıştıktan sonra:
 
-1. Herhangi bir e-posta metnini seçin.
+1. Analiz etmek istediğiniz e-posta metnini seçin.
 2. Klavyeden **F8** tuşuna basın.
-3. Seçili metin otomatik olarak analiz edilir.
+3. Uygulama seçili metni otomatik olarak analiz eder.
 4. Sonuç ayrı bir pencerede gösterilir.
 
+---
 
 ## 🧪 Test Senaryosu
 
@@ -144,7 +139,8 @@ Ayrıca performans iyileştirme analizi hazırlanmalı ve analiz sonuçları yar
 
 Hafta sonu yapılacak çalışma öncesinde gerekli hazırlıkların tamamlanmasını rica ederim.
 
-Teşekkürler.```
+Teşekkürler.
+```
 
 **Output:**
 
@@ -168,11 +164,10 @@ Yapılacaklar:
 
 4. Görev: Hafta sonu çalışması öncesi hazırlıkları tamamla.
    Öncelik: HIGH
-   Deadline: Hafta sonu çalışması öncesinde```
+   Deadline: Hafta sonu çalışması öncesinde
+```
 
-
-
-
+---
 
 ## 📁 Proje Yapısı
 
@@ -185,21 +180,24 @@ email-decision-engine/
 ├── requirements.txt      # Gerekli Python paketleri
 ├── README.md             # Proje açıklaması
 └── screenshots/          # Ekran görüntüleri
+```
+
+---
 
 ## 🚀 Sonuç
 
-Email Decision Engine, uzun ve dağınık e-postaları manuel olarak inceleme ihtiyacını azaltarak daha hızlı aksiyon alınmasını sağlar.
-Kullanıcı yalnızca e-posta metnini seçip F8 tuşuna basarak özet, görev listesi, öncelik ve deadline bilgilerine ulaşabilir.
+Email Decision Engine, uzun ve dağınık e-postaları manuel olarak inceleme ihtiyacını azaltarak daha hızlı aksiyon alınmasını sağlar.  
+Kullanıcı yalnızca e-posta metnini seçip **F8** tuşuna basarak özet, görev listesi, öncelik ve deadline bilgilerine ulaşabilir.
 
 Bu sayede e-posta yönetimi daha düzenli, takip edilebilir ve aksiyon odaklı hale gelir.
+
 ---
 
-## 👨‍💻 Geliştirici Notu
+## 👩‍💻 Geliştirici Notu
 
-Bu proje, mevcut bir GitHub reposu fork edilerek geliştirilmiştir.
+Bu proje, mevcut bir GitHub reposu fork edilerek geliştirilmiştir.  
 Ana çalışma yapısı korunmuş, uygulamanın ana işlevi e-posta analizi ve görev çıkarımı üzerine yeniden tasarlanmıştır.
+
 ---
 
 ⭐ Projeyi beğendiysen yıldızlamayı unutma!
-
-
