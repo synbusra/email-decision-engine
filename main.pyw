@@ -7,21 +7,36 @@ import time
 import threading
 import requests
 import queue
+import socket
+import sys
 
 
 # ============================================================
-# Mail Task Assistant
-# Seçili mail metnini F8 ile analiz eder.
+# Email Decision Engine
+# Seçili e-posta metnini F8 ile analiz eder.
 # Çıktı: Özet + Yapılacaklar + Öncelik + Deadline
 # ============================================================
+
+
+# ============================================================
+# TEK UYGULAMA KONTROLÜ
+# Aynı program birden fazla kez açılırsa F8 birden fazla pencere üretmesin.
+# ============================================================
+
+LOCK_SOCKET = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+try:
+    LOCK_SOCKET.bind(("127.0.0.1", 65432))
+except OSError:
+    print("Email Decision Engine zaten çalışıyor.")
+    print("Önce açık olan uygulamayı kapatın veya Görev Yöneticisi'nden pythonw.exe sürecini sonlandırın.")
+    sys.exit()
 
 
 # --- OLLAMA AYARLARI ---
 OLLAMA_TAGS_URL = "http://localhost:11434/api/tags"
 OLLAMA_GENERATE_URL = "http://localhost:11434/api/generate"
 
-# Abonelik isteyen cloud modeller kaldırıldı.
-# Lokal ücretsiz modeller arasından kurulu olan ilk model seçilir.
 TEXT_MODEL_CANDIDATES = [
     "gemma3:1b",
     "llama3.2:latest",
@@ -35,44 +50,78 @@ KISAYOL_METIN = keyboard.Key.f8
 root = None
 gui_queue = queue.Queue()
 kisayol_basildi = False
+analiz_devam_ediyor = False
 
 
 # --- MAIL ANALİZ PROMPT'U ---
 MAIL_ANALIZ_PROMPT = """
-Aşağıdaki metin bir e-posta içeriğidir.
+Sen bir e-posta görev analiz asistanısın.
 
-Bu e-postayı analiz et ve çıktıyı SADECE aşağıdaki formatta üret:
+Görevin:
+Kullanıcının seçtiği e-posta metnini analiz etmek, kısa özet çıkarmak, yapılacak işleri belirlemek, her iş için öncelik ve deadline bilgisini yazmaktır.
+
+ÇOK ÖNEMLİ:
+Cevabın SADECE aşağıdaki formatta olmalı.
+Formatı değiştirme.
+Ek açıklama yazma.
+Kuralları cevaba ekleme.
+Markdown kullanma.
+Madde işaretlerini farklılaştırma.
+
+ÇIKTI FORMATI:
 
 Özet:
-[E-postada istenenleri 1 veya 2 cümleyle özetle.Daha uzun olmasın.]
+[E-postadaki ana isteği 1 veya 2 kısa cümleyle özetle. Daha uzun olmasın.]
 
 Yapılacaklar:
 
-1. Görev: [Yapılacak işi kısa ve emir cümlesi şeklinde yaz.]
+1. Görev: [Birinci yapılacak işi kısa ve net yaz.]
    Öncelik: [HIGH / MEDIUM / LOW]
-   Deadline: [Mailde geçen son teslim tarihi. Tarih yoksa Belirtilmemiş yaz.]
+   Deadline: [Mailde geçen tarih veya zaman ifadesi. Yoksa Belirtilmemiş yaz.]
 
-2. Görev: [Yapılacak işi kısa ve emir cümlesi şeklinde yaz.]
+2. Görev: [İkinci yapılacak işi kısa ve net yaz.]
    Öncelik: [HIGH / MEDIUM / LOW]
-   Deadline: [Mailde geçen son teslim tarihi. Tarih yoksa Belirtilmemiş yaz.]
+   Deadline: [Mailde geçen tarih veya zaman ifadesi. Yoksa Belirtilmemiş yaz.]
 
-Kurallar:
-- Cevap sadece bu formatta olsun.
-- Markdown başlığı kullanma.
-- Gereksiz açıklama ekleme.
+3. Görev: [Üçüncü yapılacak işi kısa ve net yaz.]
+   Öncelik: [HIGH / MEDIUM / LOW]
+   Deadline: [Mailde geçen tarih veya zaman ifadesi. Yoksa Belirtilmemiş yaz.]
+
+FORMAT KURALLARI:
+- Her görev numarası sadece "1. Görev:", "2. Görev:", "3. Görev:" şeklinde başlamalı.
+- "Öncelik" ve "Deadline" aynı görevin altında girintili yazılmalı.
+- "Öncelik" satırını ayrı numara olarak yazma.
+- "Deadline" satırını ayrı numara olarak yazma.
+- Cevapta "ÇIKTI FORMATI", "FORMAT KURALLARI" veya "Kurallar" başlıklarını yazma.
 - Görev uydurma.
 - Mailde açıkça istenmeyen işi yazma.
-- Öncelik değerleri sadece HIGH, MEDIUM veya LOW olabilir.
-- Acil, bugün, hemen, kritik, demo öncesi, çalışma öncesi gibi işler HIGH olmalı.
-- Yakın tarihli ama kritik olmayan işler MEDIUM olmalı.
-- Bilgilendirme veya düşük etkili işler LOW olmalı.
+- Öncelik değeri sadece HIGH, MEDIUM veya LOW olabilir.
+- Bugün, acil, hemen, kritik, demo öncesi, çalışma öncesi gibi işler HIGH olmalı.
+- Yakın tarihli ancak kritik olmayan işler MEDIUM olmalı.
+- Bilgilendirme amaçlı işler LOW olmalı.
 - Bugün, yarın, Cuma günü, hafta sonu gibi ifadeleri Deadline alanına aynen yaz.
 - Tarih yoksa Deadline: Belirtilmemiş yaz.
-- Eğer tek görev varsa sadece 1 görev yaz.
-- Eğer birden fazla görev varsa numaralandırarak devam et.
 - Çıktı Türkçe olsun.
-"""
 
+DOĞRU ÖRNEK:
+
+Özet:
+E-postada sistem hatalarının giderilmesi ve performans analizinin hazırlanması istenmektedir.
+
+Yapılacaklar:
+
+1. Görev: Sistem hatasını incele ve çöz.
+   Öncelik: HIGH
+   Deadline: Bugün içerisinde
+
+2. Görev: Performans iyileştirme analizi hazırla.
+   Öncelik: MEDIUM
+   Deadline: Belirtilmemiş
+
+3. Görev: Analiz sonuçlarını paylaş.
+   Öncelik: MEDIUM
+   Deadline: Yarına kadar
+"""
 
 def get_available_text_model():
     """
@@ -217,6 +266,32 @@ def strip_code_fence(text):
     return cleaned
 
 
+def temiz_sonuc(sonuc):
+    """
+    Model bazen prompt kurallarını cevaba ekleyebilir.
+    Kurallar bölümü veya gereksiz prompt tekrarları varsa temizler.
+    """
+    if not sonuc:
+        return sonuc
+
+    sonuc = strip_code_fence(sonuc).strip()
+
+    kesme_kelimeleri = [
+        "\nKurallar:",
+        "\nKURALLAR:",
+        "\nKurallar",
+        "\nKURALLAR",
+        "\nÇIKTI FORMATI:",
+        "\nÇıktı Formatı:",
+    ]
+
+    for kelime in kesme_kelimeleri:
+        if kelime in sonuc:
+            sonuc = sonuc.split(kelime)[0].strip()
+
+    return sonuc
+
+
 def secili_metni_kopyala(max_deneme=5):
     """
     Kullanıcının seçtiği metni Ctrl+C ile panoya alır.
@@ -332,7 +407,10 @@ def islemi_yap(secili_metin):
     """
     Seçili mail metnini analiz eder.
     """
-    full_prompt = f"""
+    global analiz_devam_ediyor
+
+    try:
+        full_prompt = f"""
 {MAIL_ANALIZ_PROMPT}
 
 Analiz edilecek e-posta metni:
@@ -340,23 +418,26 @@ Analiz edilecek e-posta metni:
 {secili_metin}
 """
 
-    print("=" * 60)
-    print("Mail analizi başlatıldı.")
-    print("Mail metni analiz ediliyor...")
-    print("=" * 60)
+        print("=" * 60)
+        print("Mail analizi başlatıldı.")
+        print("Mail metni analiz ediliyor...")
+        print("=" * 60)
 
-    sonuc = ollama_cevap_al(full_prompt)
+        sonuc = ollama_cevap_al(full_prompt)
 
-    if not sonuc:
-        print("Sonuç alınamadı.")
-        return
+        if not sonuc:
+            print("Sonuç alınamadı.")
+            return
 
-    sonuc = strip_code_fence(sonuc)
+        sonuc = temiz_sonuc(sonuc)
 
-    gui_queue.put((sonuc_penceresi_goster, ("Mailden Yapılacaklar", sonuc)))
+        gui_queue.put((sonuc_penceresi_goster, ("Mailden Yapılacaklar", sonuc)))
 
-    print("Analiz tamamlandı.")
-    print("=" * 60)
+        print("Analiz tamamlandı.")
+        print("=" * 60)
+
+    finally:
+        analiz_devam_ediyor = False
 
 
 def mail_analizini_baslat():
@@ -364,6 +445,20 @@ def mail_analizini_baslat():
     F8 basıldığında seçili mail metnini alır ve direkt analiz başlatır.
     Menü göstermez.
     """
+    global analiz_devam_ediyor
+
+    if analiz_devam_ediyor:
+        gui_queue.put(
+            (
+                messagebox.showinfo,
+                (
+                    "Analiz Devam Ediyor",
+                    "Mevcut analiz tamamlanmadan yeni analiz başlatılamaz.",
+                ),
+            )
+        )
+        return
+
     secili_metin = secili_metni_kopyala()
 
     if not secili_metin.strip():
@@ -377,6 +472,8 @@ def mail_analizini_baslat():
             )
         )
         return
+
+    analiz_devam_ediyor = True
 
     threading.Thread(
         target=islemi_yap,
@@ -454,7 +551,7 @@ def ollama_baglanti_kontrol():
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("MAIL TASK ASSISTANT")
+    print("EMAIL DECISION ENGINE")
     print("=" * 60)
     print("Kullanım:")
     print("1. Bir mail metni seç.")
