@@ -9,137 +9,220 @@ import requests
 import queue
 
 
-# --- AYARLAR ---
-OLLAMA_URL = "http://localhost:11434/api/generate"
-MODEL_ADI = "gemini-3-flash-preview:latest"  # Ana model (F8)
+# ============================================================
+# Mail Task Assistant
+# Seçili mail metnini F8 ile analiz eder.
+# Çıktı: Özet + Yapılacaklar + Öncelik + Deadline
+# ============================================================
+
+
+# --- OLLAMA AYARLARI ---
+OLLAMA_TAGS_URL = "http://localhost:11434/api/tags"
+OLLAMA_GENERATE_URL = "http://localhost:11434/api/generate"
+
+# Abonelik isteyen cloud modeller kaldırıldı.
+# Lokal ücretsiz modeller arasından kurulu olan ilk model seçilir.
 TEXT_MODEL_CANDIDATES = [
-    MODEL_ADI,
-    "gemini-3-flash-preview:cloud",
+    "gemma3:1b",
+    "llama3.2:latest",
+    "llama3.1:latest",
+    "mistral:latest",
 ]
 
-KISAYOL_METIN = keyboard.Key.f8  # Metin secimi icin kisayol
+# F8 kısayolu
+KISAYOL_METIN = keyboard.Key.f8
 
-
-# Global değişkenler
 root = None
 gui_queue = queue.Queue()
 kisayol_basildi = False
 
 
-# --- MENÜ SEÇENEKLERİ VE PROMPT'LAR ---
-ISLEMLER = {
-    "📝 Gramer Düzelt": "Bu metni Türkçe yazım ve dil bilgisi kurallarına göre düzelt, resmi ve akıcı olsun. Sadece sonucu ver.",
-    "🇬🇧 İngilizceye Çevir": "Bu metni İngilizceye çevir. Sadece çeviriyi ver.",
-    "🇹🇷 Türkçeye Çevir": "Bu metni Türkçeye çevir. Sadece çeviriyi ver.",
-    "📑 Özetle (Madde Madde)": "Bu metni analiz et ve en önemli noktaları madde madde özetle.",
-    "💼 Daha Resmi Yap": "Bu metni kurumsal bir e-posta diline çevir, çok resmi olsun.",
-    "🐍 Python Koduna Çevir": "Bu metindeki isteği yerine getiren bir Python kodu yaz. Sadece kodu ver.",
-    "📧 Cevap Yaz (Mail)": "Bu gelen bir e-posta, buna kibar ve profesyonel bir cevap metni taslağı yaz.",
-    "🎮 PS5 Oyun Skor + Acımasız Yorum": (
-        "Seçili metni bir PS5 oyunu adı olarak ele al. Aşağıdaki formatta Türkçe cevap ver:\n"
-        "1) Oyun: <ad>\n"
-        "2) Topluluk Beğeni Skorları:\n"
-        "- Metacritic User Score: <değer veya 'bilgi yok'>\n"
-        "- OpenCritic / benzer eleştirmen ortalaması: <değer veya 'bilgi yok'>\n"
-        "- Oyuncu yorumu ortalaması (PS Store vb.): <değer veya 'bilgi yok'>\n"
-        "3) Hüküm: sadece 'IYI' veya 'KOTU'\n"
-        "4) Acımasız Yorum: 2-4 cümle, net ve sert.\n"
-        "Kurallar: Kesin bilmediğin puanı uydurma, onun yerine 'bilgi yok' yaz. "
-        "Yorumu skorlarla tutarlı kur."
-    ),
-}
+# --- MAIL ANALİZ PROMPT'U ---
+MAIL_ANALIZ_PROMPT = """
+Aşağıdaki metin bir e-posta içeriğidir.
+
+Bu e-postayı analiz et ve çıktıyı SADECE aşağıdaki formatta üret:
+
+Özet:
+[E-postada istenenleri 1 veya 2 cümleyle özetle.Daha uzun olmasın.]
+
+Yapılacaklar:
+
+1. Görev: [Yapılacak işi kısa ve emir cümlesi şeklinde yaz.]
+   Öncelik: [HIGH / MEDIUM / LOW]
+   Deadline: [Mailde geçen son teslim tarihi. Tarih yoksa Belirtilmemiş yaz.]
+
+2. Görev: [Yapılacak işi kısa ve emir cümlesi şeklinde yaz.]
+   Öncelik: [HIGH / MEDIUM / LOW]
+   Deadline: [Mailde geçen son teslim tarihi. Tarih yoksa Belirtilmemiş yaz.]
+
+Kurallar:
+- Cevap sadece bu formatta olsun.
+- Markdown başlığı kullanma.
+- Gereksiz açıklama ekleme.
+- Görev uydurma.
+- Mailde açıkça istenmeyen işi yazma.
+- Öncelik değerleri sadece HIGH, MEDIUM veya LOW olabilir.
+- Acil, bugün, hemen, kritik, demo öncesi, çalışma öncesi gibi işler HIGH olmalı.
+- Yakın tarihli ama kritik olmayan işler MEDIUM olmalı.
+- Bilgilendirme veya düşük etkili işler LOW olmalı.
+- Bugün, yarın, Cuma günü, hafta sonu gibi ifadeleri Deadline alanına aynen yaz.
+- Tarih yoksa Deadline: Belirtilmemiş yaz.
+- Eğer tek görev varsa sadece 1 görev yaz.
+- Eğer birden fazla görev varsa numaralandırarak devam et.
+- Çıktı Türkçe olsun.
+"""
 
 
 def get_available_text_model():
-    """Metin işlemede kullanılabilir modeli seçer."""
-    preferred_models = []
-    for model in TEXT_MODEL_CANDIDATES:
-        if model and model not in preferred_models:
-            preferred_models.append(model)
-
+    """
+    Ollama üzerinde kurulu modelleri kontrol eder.
+    TEXT_MODEL_CANDIDATES içinden ilk bulunan modeli döndürür.
+    """
     try:
-        response = requests.get("http://localhost:11434/api/tags", timeout=5)
+        response = requests.get(OLLAMA_TAGS_URL, timeout=5)
+
         if response.status_code != 200:
-            return MODEL_ADI
+            return TEXT_MODEL_CANDIDATES[0]
 
-        models = response.json().get("models", [])
-        installed_lower = {m.get("name", "").lower(): m.get("name", "") for m in models}
+        data = response.json()
+        models = data.get("models", [])
 
-        for candidate in preferred_models:
+        installed_models = []
+
+        for model in models:
+            name = model.get("name", "")
+            if name:
+                installed_models.append(name)
+
+        installed_lower_map = {
+            model_name.lower(): model_name
+            for model_name in installed_models
+        }
+
+        for candidate in TEXT_MODEL_CANDIDATES:
             candidate_lower = candidate.lower()
-            if candidate_lower in installed_lower:
-                return installed_lower[candidate_lower]
 
+            # Tam eşleşme
+            if candidate_lower in installed_lower_map:
+                return installed_lower_map[candidate_lower]
+
+            # Tag olmadan model adı eşleşmesi
             candidate_base = candidate_lower.split(":")[0]
-            for installed_name_lower, installed_name in installed_lower.items():
-                if installed_name_lower.startswith(candidate_base + ":"):
-                    return installed_name
+
+            for installed_lower, original_name in installed_lower_map.items():
+                installed_base = installed_lower.split(":")[0]
+
+                if installed_base == candidate_base:
+                    return original_name
+
+        # Adaylardan hiçbiri yoksa kurulu ilk modeli kullan
+        if installed_models:
+            return installed_models[0]
+
     except Exception:
         pass
 
-    return MODEL_ADI
+    return TEXT_MODEL_CANDIDATES[0]
 
 
 def ollama_cevap_al(prompt):
-    """Ollama API'den cevap al."""
+    """
+    Ollama API'ye prompt gönderir ve cevabı döndürür.
+    """
     try:
         aktif_model = get_available_text_model()
+
         payload = {
             "model": aktif_model,
             "prompt": prompt,
             "stream": False,
             "options": {
-                "temperature": 0.7,
+                "temperature": 0.1,
                 "top_p": 0.9,
             },
         }
 
-        response = requests.post(OLLAMA_URL, json=payload, timeout=60)
+        response = requests.post(
+            OLLAMA_GENERATE_URL,
+            json=payload,
+            timeout=120
+        )
 
         if response.status_code == 200:
             result = response.json()
             return result.get("response", "").strip()
 
-        err_msg = (
-            f"Ollama API Hatası: {response.status_code}\n"
-            f"Model: {aktif_model}\n"
-            f"Cevap: {response.text}"
+        hata = (
+            "Ollama API hatası oluştu.\n\n"
+            f"HTTP Durum Kodu: {response.status_code}\n"
+            f"Kullanılan Model: {aktif_model}\n\n"
+            f"Detay:\n{response.text}"
         )
-        print(f"❌ {err_msg}")
-        gui_queue.put((messagebox.showerror, ("API Hatası", err_msg)))
+
+        print(hata)
+        gui_queue.put((messagebox.showerror, ("API Hatası", hata)))
         return None
 
     except requests.exceptions.ConnectionError:
-        err_msg = (
-            "Ollama'ya bağlanılamadı.\n"
-            "Programın çalıştığından emin olun!\n"
-            "(http://localhost:11434)"
+        hata = (
+            "Ollama servisine bağlanılamadı.\n\n"
+            "Lütfen Ollama'nın çalıştığından emin olun.\n"
+            "Varsayılan adres: http://localhost:11434\n\n"
+            "Kontrol için CMD'de şunu çalıştırabilirsin:\n"
+            "ollama list"
         )
-        print(f"❌ {err_msg}")
-        gui_queue.put((messagebox.showerror, ("Bağlantı Hatası", err_msg)))
+
+        print(hata)
+        gui_queue.put((messagebox.showerror, ("Bağlantı Hatası", hata)))
         return None
+
+    except requests.exceptions.Timeout:
+        hata = (
+            "Model cevap verirken zaman aşımına uğradı.\n\n"
+            "Daha kısa bir mail metni seçerek tekrar deneyebilirsin."
+        )
+
+        print(hata)
+        gui_queue.put((messagebox.showerror, ("Zaman Aşımı", hata)))
+        return None
+
     except Exception as e:
-        err_msg = f"Beklenmeyen Hata: {e}"
-        print(f"❌ {err_msg}")
-        gui_queue.put((messagebox.showerror, ("Hata", err_msg)))
+        hata = f"Beklenmeyen hata oluştu:\n\n{e}"
+        print(hata)
+        gui_queue.put((messagebox.showerror, ("Hata", hata)))
         return None
 
 
 def strip_code_fence(text):
+    """
+    Model yanlışlıkla ``` gibi kod bloğu işaretleri döndürürse temizler.
+    """
     if not text:
         return text
+
     cleaned = text.strip()
+
     if cleaned.startswith("```"):
         lines = cleaned.splitlines()
-        lines = lines[1:] if lines else []
+
+        if lines:
+            lines = lines[1:]
+
         while lines and lines[-1].strip() == "```":
             lines = lines[:-1]
+
         cleaned = "\n".join(lines).strip()
+
     return cleaned
 
 
-def secili_metni_kopyala(max_deneme=4):
-    sentinel = f"__AI_ASISTAN__{time.time_ns()}__"
+def secili_metni_kopyala(max_deneme=5):
+    """
+    Kullanıcının seçtiği metni Ctrl+C ile panoya alır.
+    """
+    sentinel = f"__MAIL_TASK_ASSISTANT_EMPTY_CLIPBOARD_{time.time_ns()}__"
+
     try:
         pyperclip.copy(sentinel)
     except Exception:
@@ -148,37 +231,56 @@ def secili_metni_kopyala(max_deneme=4):
     for _ in range(max_deneme):
         pyautogui.hotkey("ctrl", "c")
         time.sleep(0.2)
-        metin = pyperclip.paste()
+
+        try:
+            metin = pyperclip.paste()
+        except Exception:
+            metin = ""
+
         if metin and metin.strip() and metin != sentinel:
-            return metin
+            return metin.strip()
+
     return ""
 
 
-def pencere_modunda_gosterilsin_mi(komut_adi):
-    return "PS5 Oyun Skor" in komut_adi
-
-
 def sonuc_penceresi_goster(baslik, icerik):
+    """
+    Analiz sonucunu ayrı pencerede gösterir.
+    """
     pencere = tk.Toplevel(root)
     pencere.title(baslik)
-    pencere.geometry("780x520")
-    pencere.minsize(520, 320)
+    pencere.geometry("850x600")
+    pencere.minsize(600, 400)
     pencere.attributes("-topmost", True)
 
-    frame = tk.Frame(pencere, bg="#1f1f1f")
-    frame.pack(fill="both", expand=True, padx=10, pady=10)
+    ana_frame = tk.Frame(pencere, bg="#1f1f1f")
+    ana_frame.pack(fill="both", expand=True, padx=10, pady=10)
+
+    baslik_label = tk.Label(
+        ana_frame,
+        text=baslik,
+        bg="#1f1f1f",
+        fg="white",
+        font=("Segoe UI", 13, "bold"),
+        anchor="w"
+    )
+    baslik_label.pack(fill="x", pady=(0, 8))
+
+    metin_frame = tk.Frame(ana_frame, bg="#1f1f1f")
+    metin_frame.pack(fill="both", expand=True)
 
     text_alani = tk.Text(
-        frame,
+        metin_frame,
         wrap="word",
-        bg="#2b2b2b",
-        fg="white",
-        insertbackground="white",
-        font=("Segoe UI", 10),
-        padx=10,
-        pady=10,
+        bg="#ffffff",
+        fg="#111111",
+        insertbackground="#111111",
+        font=("Consolas", 10),
+        padx=14,
+        pady=14
     )
-    kaydirma = tk.Scrollbar(frame, command=text_alani.yview)
+
+    kaydirma = tk.Scrollbar(metin_frame, command=text_alani.yview)
     text_alani.configure(yscrollcommand=kaydirma.set)
 
     text_alani.pack(side="left", fill="both", expand=True)
@@ -187,143 +289,140 @@ def sonuc_penceresi_goster(baslik, icerik):
     text_alani.insert("1.0", icerik)
     text_alani.config(state="disabled")
 
-    alt_frame = tk.Frame(pencere, bg="#1f1f1f")
-    alt_frame.pack(fill="x", padx=10, pady=(0, 10))
+    buton_frame = tk.Frame(ana_frame, bg="#1f1f1f")
+    buton_frame.pack(fill="x", pady=(10, 0))
 
     def panoya_kopyala():
         pyperclip.copy(icerik)
+        messagebox.showinfo("Kopyalandı", "Sonuç panoya kopyalandı.")
 
-    tk.Button(
-        alt_frame,
+    kopyala_buton = tk.Button(
+        buton_frame,
         text="Panoya Kopyala",
         command=panoya_kopyala,
         bg="#3d3d3d",
         fg="white",
-        activebackground="#4d4d4d",
+        activebackground="#505050",
         activeforeground="white",
         relief="flat",
-        padx=12,
-        pady=6,
-    ).pack(side="left")
+        padx=14,
+        pady=7
+    )
+    kopyala_buton.pack(side="left")
 
-    tk.Button(
-        alt_frame,
+    kapat_buton = tk.Button(
+        buton_frame,
         text="Kapat",
         command=pencere.destroy,
         bg="#3d3d3d",
         fg="white",
-        activebackground="#4d4d4d",
+        activebackground="#505050",
         activeforeground="white",
         relief="flat",
-        padx=12,
-        pady=6,
-    ).pack(side="right")
+        padx=14,
+        pady=7
+    )
+    kapat_buton.pack(side="right")
 
     pencere.focus_force()
     pencere.lift()
 
 
-def islemi_yap(komut_adi, secili_metin):
-    prompt_emri = ISLEMLER[komut_adi]
-    full_prompt = f"{prompt_emri}:\n\n'{secili_metin}'"
+def islemi_yap(secili_metin):
+    """
+    Seçili mail metnini analiz eder.
+    """
+    full_prompt = f"""
+{MAIL_ANALIZ_PROMPT}
 
-    print(f"🤖 İşlem: {komut_adi}")
-    print("⏳ Ollama ile işleniyor...")
+Analiz edilecek e-posta metni:
+
+{secili_metin}
+"""
+
+    print("=" * 60)
+    print("Mail analizi başlatıldı.")
+    print("Mail metni analiz ediliyor...")
+    print("=" * 60)
 
     sonuc = ollama_cevap_al(full_prompt)
+
     if not sonuc:
-        print("❌ Sonuç alınamadı.")
+        print("Sonuç alınamadı.")
         return
 
     sonuc = strip_code_fence(sonuc)
-    if sonuc.startswith("'") and sonuc.endswith("'"):
-        sonuc = sonuc[1:-1]
 
-    if pencere_modunda_gosterilsin_mi(komut_adi):
-        gui_queue.put((sonuc_penceresi_goster, (komut_adi, sonuc)))
-        print("âœ… SonuÃ§ ayrÄ± pencerede gÃ¶sterildi.")
-        return
+    gui_queue.put((sonuc_penceresi_goster, ("Mailden Yapılacaklar", sonuc)))
 
-    time.sleep(0.2)
-    pyperclip.copy(sonuc)
-    time.sleep(0.1)
-    pyautogui.hotkey("ctrl", "v")
-    print("✅ İşlem tamamlandı!")
+    print("Analiz tamamlandı.")
+    print("=" * 60)
 
 
-def process_queue():
-    """Kuyruktaki GUI işlemlerini ana thread'de çalıştırır."""
-    try:
-        while True:
-            try:
-                task = gui_queue.get_nowait()
-            except queue.Empty:
-                break
-            func, args = task
-            func(*args)
-    finally:
-        if root:
-            root.after(100, process_queue)
-
-
-def menu_goster():
-    """Metni kopyalar ve menüyü gösterir (ana thread)."""
+def mail_analizini_baslat():
+    """
+    F8 basıldığında seçili mail metnini alır ve direkt analiz başlatır.
+    Menü göstermez.
+    """
     secili_metin = secili_metni_kopyala()
+
     if not secili_metin.strip():
         gui_queue.put(
             (
                 messagebox.showwarning,
                 (
-                    "Secim Bulunamadi",
-                    "Lutfen once metin secin, sonra F8 ile menuyu acin.",
+                    "Seçim Bulunamadı",
+                    "Lütfen önce bir mail metni seçin, ardından F8 tuşuna basın.",
                 ),
             )
         )
         return
 
-    menu = tk.Menu(
-        root,
-        tearoff=0,
-        bg="#2b2b2b",
-        fg="white",
-        activebackground="#4a4a4a",
-        activeforeground="white",
-        font=("Segoe UI", 10),
-    )
+    threading.Thread(
+        target=islemi_yap,
+        args=(secili_metin,),
+        daemon=True
+    ).start()
 
-    def komut_olustur(k_adi, s_metin):
-        def komut_calistir():
-            threading.Thread(
-                target=islemi_yap, args=(k_adi, s_metin), daemon=True
-            ).start()
 
-        return komut_calistir
-
-    for baslik in ISLEMLER.keys():
-        menu.add_command(label=baslik, command=komut_olustur(baslik, secili_metin))
-
-    menu.add_separator()
-    menu.add_command(label="❌ İptal", command=lambda: None)
-
+def process_queue():
+    """
+    Tkinter işlemlerini ana thread üzerinde çalıştırır.
+    """
     try:
-        x, y = pyautogui.position()
-        menu.tk_popup(x, y)
+        while True:
+            try:
+                func, args = gui_queue.get_nowait()
+            except queue.Empty:
+                break
+
+            func(*args)
+
     finally:
-        menu.grab_release()
+        if root:
+            root.after(100, process_queue)
 
 
 def on_press(key):
+    """
+    F8 basıldığında çalışır.
+    """
     global kisayol_basildi
+
     try:
         if key == KISAYOL_METIN and not kisayol_basildi:
             kisayol_basildi = True
-            gui_queue.put((menu_goster, ()))
+            gui_queue.put((mail_analizini_baslat, ()))
     except AttributeError:
         pass
 
 
 def on_release(key):
+    """
+    F8 bırakıldığında tekrar basılabilir hale getirir.
+    """
     global kisayol_basildi
+
     try:
         if key == KISAYOL_METIN:
             kisayol_basildi = False
@@ -331,31 +430,44 @@ def on_release(key):
         pass
 
 
+def ollama_baglanti_kontrol():
+    """
+    Program açılırken Ollama bağlantısını kontrol eder.
+    """
+    try:
+        response = requests.get(OLLAMA_TAGS_URL, timeout=5)
+
+        if response.status_code == 200:
+            aktif_model = get_available_text_model()
+            print("Ollama bağlantısı başarılı.")
+            print(f"Kullanılacak model: {aktif_model}")
+            return True
+
+        print("Ollama çalışıyor gibi görünüyor ancak model listesi alınamadı.")
+        return False
+
+    except Exception:
+        print("Ollama bağlantısı kurulamadı.")
+        print("Ollama açık değilse uygulama model cevabı üretemez.")
+        return False
+
+
 if __name__ == "__main__":
     print("=" * 60)
-    print("🤖 AI Asistan - Metin İşleme")
+    print("MAIL TASK ASSISTANT")
     print("=" * 60)
-    aktif_text_model = get_available_text_model()
-    print(f"📦 Metin İşleme (F8): {aktif_text_model}")
-    print()
-    print("🔧 Kullanım:")
-    print("   F8 - Metin sec ve AI islemleri yap")
-    print()
-    print("⚠️ Programı kapatmak için bu pencereyi kapatın veya Ctrl+C yapın.")
+    print("Kullanım:")
+    print("1. Bir mail metni seç.")
+    print("2. F8 tuşuna bas.")
+    print("3. Analiz sonucu otomatik olarak pencerede gösterilir.")
     print("=" * 60)
 
-    try:
-        test_response = requests.get("http://localhost:11434/api/tags", timeout=5)
-        if test_response.status_code == 200:
-            print("✅ Ollama bağlantısı başarılı!")
-        else:
-            print("⚠️ Ollama'ya bağlanılamadı, servisi kontrol edin!")
-    except Exception:
-        print("⚠️ Ollama çalışmıyor olabilir! 'ollama serve' ile başlatın.")
+    ollama_baglanti_kontrol()
 
-    print()
-
-    listener = keyboard.Listener(on_press=on_press, on_release=on_release)
+    listener = keyboard.Listener(
+        on_press=on_press,
+        on_release=on_release
+    )
     listener.start()
 
     root = tk.Tk()
@@ -365,4 +477,4 @@ if __name__ == "__main__":
     try:
         root.mainloop()
     except KeyboardInterrupt:
-        print("Kapatılıyor...")
+        print("Program kapatılıyor...")
