@@ -45,11 +45,12 @@ Uygulama, kullanıcı tarafından seçilen e-posta içeriğini **F8 kısayolu** 
 
 ### Mail Metni Seçimi
 
-![Mail Metni Seçimi](1.png)
+![Mail Metni Seçimi](./screenshots/1.png)
 
 ### Analiz Sonucu
 
-![Analiz Sonucu](2.png)
+![Analiz Sonucu](./screenshots/2.png)
+
 
 ## ⚡ Özellikler
 
