@@ -67,6 +67,7 @@ graph LR
     E --> H["Sonuç penceresi"]
     F --> H
     G --> H
+```
 
 ## 🤖 Kullanılan Teknolojiler
 
