@@ -96,7 +96,10 @@ FORMAT KURALLARI:
 - Görev uydurma.
 - Mailde açıkça istenmeyen işi yazma.
 - Öncelik değeri sadece HIGH, MEDIUM veya LOW olabilir.
-- Bugün, acil, hemen, kritik, demo öncesi, çalışma öncesi gibi işler HIGH olmalı.
+- HIGH yalnızca mailde "acil", "kritik", "bugün", "hemen", "kesinti", "güvenlik riski" veya "bloke" gibi açık aciliyet/etki ifadesi varsa kullanılmalı.
+- MEDIUM tarih verilmiş kontrol, analiz, düzenleme, güncelleme, tamamlama, son kontrol, durum paylaşımı ve takip işleri için kullanılmalı.
+- LOW yalnızca bilgilendirme veya düşük etkili notlar için kullanılmalı.
+- "Öncelikli", "önemli", "rica ederim" veya sadece tarih/deadline geçmesi HIGH sebebi değildir.
 - Yakın tarihli ancak kritik olmayan işler MEDIUM olmalı.
 - Bilgilendirme amaçlı işler LOW olmalı.
 - Bugün, yarın, Cuma günü, hafta sonu gibi ifadeleri Deadline alanına aynen yaz.
